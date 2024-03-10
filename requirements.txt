@@ -1,0 +1,4 @@
+tensorflow~=2.15.0.post1
+braindecode~=0.8.1
+moabb~=1.0.0
+mne~=1.6.1
