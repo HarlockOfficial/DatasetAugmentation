@@ -1,18 +1,17 @@
 # Network presented in: https://pure.ulster.ac.uk/en/publications/mieeg-gan-generating-artificial-motor-imagery-electroencephalogra
 import os
 import random
+import sys
 from time import time
 
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from braindecode.preprocessing import create_windows_from_events
+from moabb.datasets import PhysionetMI
 
-import sys
 sys.path.append("\home\harlock\thesis_project\DatasetAugmentation")
 from DatasetAugmentation import utils
 
-seed = tf.random.normal([22, 500, 50])
 random.seed(42)
 tf.random.set_seed(42)
 np.random.seed(42)
@@ -55,11 +54,10 @@ def train(training_dataset, generator, discriminator, gan, steps_per_epoch, epoc
             discriminator_loss_real = float('inf')
             for iteration in range(2*steps_per_epoch):
                 print("Starting Discriminator Train Iteration:", iteration + 1, "of", 2*steps_per_epoch)
-                real_data = random.choice(training_dataset)
-                noise = tf.random.normal([batch_size, 500, 50])
+                real_data = np.array(random.sample(training_dataset, batch_size))
+                noise = tf.random.normal([batch_size, 58, 65])
                 fake_data = generator.predict(noise)
                 discriminator_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size, 1)))
-                fake_data = np.reshape(fake_data, (batch_size, 500))
                 discriminator_loss_fake = discriminator.train_on_batch(fake_data, np.zeros((batch_size, 1)))
 
             if len(avg_loss_discriminator) > 0 and avg_loss_discriminator[-1] <= 0.2:
@@ -77,7 +75,7 @@ def train(training_dataset, generator, discriminator, gan, steps_per_epoch, epoc
             y = np.ones((batch_size, 1))
             for iteration in range(steps_per_epoch):
                 print("Starting GAN Train Iteration:", iteration + 1, "of", steps_per_epoch)
-                noise = tf.random.normal([batch_size, 500, 50])
+                noise = tf.random.normal([batch_size, 58, 65])
                 generator_loss += gan.train_on_batch(noise, y)[0]
             if changed_steps_per_epoch_generator:
                 steps_per_epoch //= generator_increase_factor
@@ -134,28 +132,9 @@ def train(training_dataset, generator, discriminator, gan, steps_per_epoch, epoc
 
 def main():
     print("Starting EEG GAN Training process, with pid = ", os.getpid(), " and ppid = ", os.getppid())
-    dataset = utils.load_dataset(verbose=1)
-    dataset = utils.preprocess_dataset(dataset)
+    x, y = utils.load_dataset(PhysionetMI, verbose=1)
 
-    windows_dataset = create_windows_from_events(
-        dataset,
-        preload=True,
-        trial_start_offset_samples=0,
-        trial_stop_offset_samples=0,
-        window_size_samples=500,
-        window_stride_samples=50,
-        drop_last_window=False,
-        n_jobs=20,
-    )
-
-    dataset_dict = windows_dataset.split("session")
-    # print(dataset_dict.keys())
-    train_dataset = dataset_dict['0train']
-    test_dataset = dataset_dict['1test']
-
-    print(type(train_dataset))
-
-    train_dataset_by_label = utils.split_dataset_by_label(train_dataset)
+    train_dataset_by_label = utils.split_dataset_by_label(x, y, verbose=1)
     generator_list = []
     discriminator_list = []
     gan_list = []
@@ -178,9 +157,6 @@ def main():
         gan = utils.eeg_gan_network(generator_list[index], discriminator_list[index], generator_loss, discriminator_loss, gan_loss, generator_optimizer, discriminator_optimizer, gan_optimizer)
         print(gan.summary())
         generator, discriminator, gan, avg_loss_discriminator, avg_loss_generator = train(train_dataset_by_label[label], generator_list[index], discriminator_list[index], gan, steps_per_epoch=10, epochs=10, batch_size=22, checkpoint=checkpoint, checkpoint_prefix=checkpoint_prefix, dataset_label=label)
-        gan_list.append(gan)
-        generator_list[index] = generator
-        discriminator_list[index] = discriminator
         print("Training Complete")
         print("Average Loss Discriminator:", avg_loss_discriminator)
         print("Average Loss Generator:", avg_loss_generator)

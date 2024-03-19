@@ -1,31 +1,52 @@
 import os
 
+import moabb.datasets
 from braindecode.datasets import MOABBDataset
 import tensorflow as tf
+from moabb.paradigms import MotorImagery
 
+OUTPUT_CLASSES = 3
+SAMPLE_RATE = 128  # Hz (samples per second)
+SECOND_DURATION = 0.5  # seconds
 
-def load_dataset(moabb_dataset_name: str = "BNCI2014_001", subject_id = None, verbose: int = 0):
+def load_dataset(moabb_dataset_class = moabb.datasets.BNCI2014_001, subject_id = None, verbose: int = 0):
     """Load a dataset from MOABB.
 
     Args:
-        moabb_dataset_name (str, optional): The name of the dataset to load. Defaults to "BNCI2014_001".
+        moabb_dataset_class: The name of the dataset to load. Defaults to "BNCI2014_001".
         subject_id (Any, optional): The subject to load. If None, load all subjects. Defaults to None.
         verbose (int, optional): The verbosity level. Defaults to 0.
 
     Returns:
         [type]: [description]
     """
-    dataset = MOABBDataset(moabb_dataset_name, subject_ids=subject_id)
-    if verbose>0:
-        print(dataset.description)
-    return dataset
 
-def preprocess_dataset(local_dataset):
+    ALL_EEG_CHANNELS = ['FC4', 'P3', 'CP2', 'Fp2', 'Fpz', 'PO4', 'Fp1', 'F3', 'CP3', 'Fz', 'Pz', 'F1', 'AF4', 'CP1',
+                        'PO3', 'Cz', 'FC1', 'F4', 'P1', 'O1', 'F8', 'CP6', 'POz', 'FC5', 'FT8', 'P4', 'T8', 'CP4', 'F6',
+                        'O2', 'C1', 'Oz', 'C2', 'P6', 'C4', 'F2', 'F5', 'PO7', 'C3', 'FC2', 'FC3', 'TP7', 'P5', 'C5',
+                        'T7', 'C6', 'TP8', 'P8', 'FT7', 'CPz', 'AF3', 'FC6', 'P7', 'F7', 'PO8', 'CP5', 'P2', 'FCz']
+    INPUT_CHANNELS = len(ALL_EEG_CHANNELS)
+    print("Using the ", INPUT_CHANNELS, "Channels:", ALL_EEG_CHANNELS)
+
+    paradigm = MotorImagery(channels=ALL_EEG_CHANNELS, events=['left_hand', 'right_hand', 'feet'],
+                            n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION,
+                            resample=SAMPLE_RATE, )
+
+    x, y, _ = paradigm.get_data(moabb_dataset_class(), subjects=subject_id)
+    if verbose>0:
+        print("X Shape:", x.shape)
+        print("Y Shape:", y.shape)
+    return x, y
+
+def __to_mV(x):
+    return x * 1e6
+
+def preprocess_dataset(local_dataset, n_jobs: int = 20):
     from braindecode.preprocessing import exponential_moving_standardize
     from braindecode.preprocessing import Preprocessor, preprocess
 
-    low_cut_hz = 4.  # low cut frequency for filtering
-    high_cut_hz = 38.  # high cut frequency for filtering
+    low_cut_hz = 0.5  # low cut frequency for filtering
+    high_cut_hz = 40.  # high cut frequency for filtering
     # Parameters for exponential moving standardization
     factor_new = 1e-3
     init_block_size = 1000
@@ -35,28 +56,28 @@ def preprocess_dataset(local_dataset):
     preprocessors = [# keep only EEG sensors
         Preprocessor(fn='pick_types', eeg=True, meg=False, stim=False),
         # convert from volt to microvolt, directly modifying the numpy array
-        Preprocessor(fn=lambda x: x * 1e6), # bandpass filter
+        Preprocessor(fn=__to_mV),
+        # bandpass filter
         Preprocessor(fn='filter', l_freq=low_cut_hz, h_freq=high_cut_hz), # exponential moving standardization
         Preprocessor(fn=exponential_moving_standardize, factor_new=factor_new, init_block_size=init_block_size),
         Preprocessor(fn='resample', sfreq=min_sfreq)]
 
     # Preprocess the data
-    preprocess(local_dataset, preprocessors, n_jobs=20)
+    preprocess(local_dataset, preprocessors, n_jobs=n_jobs)
     return local_dataset
 
 
-def split_dataset_by_label(local_dataset, verbose: int = 0):
+def split_dataset_by_label(x, y, verbose: int = 0):
     """
     Split the dataset by label.
     """
     dataset_by_label = dict()
-    for x, Y, _ in local_dataset:
+    for x, Y in zip(x, y):
         if Y not in dataset_by_label.keys():
             dataset_by_label[Y] = []
         dataset_by_label[Y].append(x)
     if verbose>0:
         print(dataset_by_label.keys())
-        print(type(dataset_by_label[0]))
 
     return dataset_by_label
 
@@ -85,10 +106,10 @@ def eeg_generator(generator_index: str = None, base_path: str = './', return_is_
         return model
 
     # Loss function: Categorical Cross-Entropy
-    network_input = tf.keras.layers.Input(shape=(500, 50))
+    network_input = tf.keras.layers.Input(shape=(58, 65))
     dropout = two_layer_blstm_with_dropout(network_input)
     dropout2 = two_layer_blstm_with_dropout(dropout)
-    output = tf.keras.layers.Dense(1, activation='tanh')(dropout2)
+    output = tf.keras.layers.Dense(65, activation='tanh')(dropout2)
     model = tf.keras.Model(inputs=[network_input], outputs=[output], name='generator')
     if return_is_new:
         return model, True
@@ -113,9 +134,8 @@ def eeg_discriminator(discriminator_index: str = None, base_path: str = './', re
         return model
 
     # Loss function: Categorical Cross-Entropy
-    network_input = tf.keras.layers.Input(shape=(500,))
-    reshape = tf.keras.layers.Reshape((500, 1))(network_input)
-    dropout = two_layer_blstm_with_dropout(reshape)
+    network_input = tf.keras.layers.Input(shape=(58,65))
+    dropout = two_layer_blstm_with_dropout(network_input)
     flatten = tf.keras.layers.Flatten()(dropout)
     output = tf.keras.layers.Dense(1, activation='sigmoid')(flatten)
     model = tf.keras.Model(inputs=[network_input], outputs=[output], name='discriminator')
