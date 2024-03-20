@@ -61,9 +61,9 @@ def train(training_dataset, generator, discriminator, gan, steps_per_epoch, epoc
         # Save loss
         if len(avg_loss_generator) == 0 or epoch_loss_generator < min(avg_loss_generator):
             checkpoint.save(file_prefix=checkpoint_prefix)
-            generator.save('./generator.h5')
-            discriminator.save('./discriminator.h5')
-            gan.save('./gan.h5')
+            generator.save('./generator.keras')
+            discriminator.save('./discriminator.keras')
+            gan.save('./gan.keras')
             print("Checkpoint Saved")
         avg_fake_input_loss_discriminator.append(np.mean(fake_input_loss_discriminator))
         avg_real_input_loss_discriminator.append(np.mean(real_input_loss_discriminator))
