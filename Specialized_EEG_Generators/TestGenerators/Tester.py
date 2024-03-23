@@ -21,7 +21,7 @@ def main(out_class, path_to_neural_network):
     discriminator, is_discriminator_new = utils.eeg_discriminator(out_class, path_to_neural_network, return_is_new=True, is_training=False)
     generator_loss, discriminator_loss, gan_loss = utils.eeg_gan_default_loss()
     generator_optimizer, discriminator_optimizer, gan_optimizer = utils.eeg_gan_default_optimizer()
-    gan, is_gan_new = utils.eeg_gan_network(generator, discriminator, generator_loss, discriminator_loss, gan_loss, generator_optimizer, discriminator_optimizer, gan_optimizer, out_class, path_to_neural_network, return_is_new=True, is_training=False)
+    gan, is_gan_new = utils.eeg_gan_network(generator, discriminator, discriminator_loss, gan_loss, discriminator_optimizer, gan_optimizer, out_class, path_to_neural_network, return_is_new=True, is_training=False)
 
     assert not is_generator_new and not is_discriminator_new and not is_gan_new, "At least one of the models is new, please train the models first"
 

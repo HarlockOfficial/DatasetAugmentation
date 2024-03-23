@@ -1,7 +1,6 @@
 import os
 
 import moabb.datasets
-from braindecode.datasets import MOABBDataset
 import tensorflow as tf
 from moabb.paradigms import MotorImagery
 
@@ -9,7 +8,7 @@ OUTPUT_CLASSES = 3
 SAMPLE_RATE = 128  # Hz (samples per second)
 SECOND_DURATION = 0.5  # seconds
 
-def load_dataset(moabb_dataset_class = moabb.datasets.BNCI2014_001, subject_id = None, verbose: int = 0):
+def load_dataset(moabb_dataset_class = moabb.datasets.BNCI2014001, subject_id = None, verbose: int = 0):
     """Load a dataset from MOABB.
 
     Args:
@@ -66,7 +65,6 @@ def preprocess_dataset(local_dataset, n_jobs: int = 20):
     preprocess(local_dataset, preprocessors, n_jobs=n_jobs)
     return local_dataset
 
-
 def split_dataset_by_label(x, y, verbose: int = 0):
     """
     Split the dataset by label.
@@ -82,14 +80,14 @@ def split_dataset_by_label(x, y, verbose: int = 0):
     return dataset_by_label
 
 def two_layer_blstm_with_dropout(network_input):
-    bi_lstm_1 = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(30, activation='tanh', return_sequences=True))(
+    bi_lstm_1 = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(65, activation='tanh', return_sequences=True))(
         network_input)
-    bi_lstm_2 = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(30, activation='tanh', return_sequences=True))(
+    bi_lstm_2 = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(65, activation='tanh', return_sequences=True))(
         bi_lstm_1)
     dropout = tf.keras.layers.Dropout(0.5)(bi_lstm_2)
     return dropout
 
-def eeg_generator(generator_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True):
+def eeg_generator(generator_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True, graph: bool = False):
     # if generator.h5 exists, load it
     if generator_index is not None:
         if os.path.exists(base_path + 'generator_' + generator_index + '.h5'):
@@ -108,15 +106,15 @@ def eeg_generator(generator_index: str = None, base_path: str = './', return_is_
     # Loss function: Categorical Cross-Entropy
     network_input = tf.keras.layers.Input(shape=(58, 65))
     dropout = two_layer_blstm_with_dropout(network_input)
-    dropout2 = two_layer_blstm_with_dropout(dropout)
-    output = tf.keras.layers.Dense(65, activation='tanh')(dropout2)
+    # dropout2 = two_layer_blstm_with_dropout(dropout)
+    output = tf.keras.layers.Dense(65, activation='tanh')(dropout)
     model = tf.keras.Model(inputs=[network_input], outputs=[output], name='generator')
     if return_is_new:
         return model, True
     return model
 
 
-def eeg_discriminator(discriminator_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True):
+def eeg_discriminator(discriminator_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True, graph: bool = False):
     # if discriminator.h5 exists, load it
     if discriminator_index is not None:
         if os.path.exists(base_path + 'discriminator_' + discriminator_index + '.h5'):
@@ -143,7 +141,13 @@ def eeg_discriminator(discriminator_index: str = None, base_path: str = './', re
         return model, True
     return model
 
-def eeg_gan_network(generator, discriminator, generator_loss, discriminator_loss, gan_loss, generator_optimizer, discriminator_optimizer, gan_optimizer, gan_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True):
+def discriminator_loss(real_output, predicted_output):
+    return tf.keras.losses.binary_crossentropy(real_output, predicted_output, from_logits=True)
+
+def generator_loss(true_output, predicted_output):
+    return tf.keras.losses.binary_crossentropy(true_output, predicted_output, from_logits=True)
+
+def eeg_gan_network(generator, discriminator, discriminator_optimizer, gan_optimizer, gan_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True, graph: bool = False):
     if gan_index is not None:
         if os.path.exists(base_path + 'gan_' + gan_index + '.h5'):
             print("Loading Model from File for GAN")
@@ -159,25 +163,18 @@ def eeg_gan_network(generator, discriminator, generator_loss, discriminator_loss
             return model, False
         return model
 
-    discriminator.compile(optimizer=discriminator_optimizer, loss=discriminator_loss)
+    discriminator.compile(optimizer=discriminator_optimizer, loss=discriminator_loss, run_eagerly=not graph)
     gan = tf.keras.Sequential()
     gan.add(generator)
     gan.add(discriminator)
     discriminator.trainable = False
-    gan.compile(optimizer=gan_optimizer, loss=gan_loss, metrics=['mae'])
+    gan.compile(optimizer=gan_optimizer, loss=generator_loss, metrics=['mae'], run_eagerly=not graph)
     if return_is_new:
         return gan, True
     return gan
 
-def eeg_gan_default_loss():
-    generator_loss = lambda x: tf.keras.losses.binary_crossentropy(tf.ones_like(x), x)
-    discriminator_loss = tf.keras.losses.binary_crossentropy
-    gan_loss = tf.keras.losses.binary_crossentropy
-    return generator_loss, discriminator_loss, gan_loss
-
 def eeg_gan_default_optimizer():
     generator_optimizer = tf.keras.optimizers.Adam(1e-4)
     discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
-    gan_optimizer = tf.keras.optimizers.Adam(1e-4)
-    return generator_optimizer, discriminator_optimizer, gan_optimizer
+    return generator_optimizer, discriminator_optimizer
 

@@ -123,7 +123,7 @@ def main():
     if os.path.exists(checkpoint_dir):
         checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
 
-    gan = utils.eeg_gan_network(generator, discriminator, generator_loss, discriminator_loss, gan_loss, generator_optimizer, discriminator_optimizer, gan_optimizer)
+    gan = utils.eeg_gan_network(generator, discriminator, generator_loss, gan_loss, generator_optimizer, gan_optimizer)
     print(gan.summary())
     generator, discriminator, gan, avg_loss_discriminator, avg_loss_generator = train(train_dataset, generator, discriminator, gan, steps_per_epoch=10, epochs=10, batch_size=22, checkpoint=checkpoint, checkpoint_prefix=checkpoint_prefix)
     print("Training Complete")
