@@ -3,6 +3,7 @@ import os
 import moabb.datasets
 import tensorflow as tf
 from moabb.paradigms import MotorImagery
+from typing_extensions import deprecated
 
 OUTPUT_CLASSES = 3
 SAMPLE_RATE = 128  # Hz (samples per second)
@@ -90,15 +91,17 @@ def two_layer_blstm_with_dropout(network_input):
 def eeg_generator(generator_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True, graph: bool = False):
     # if generator.h5 exists, load it
     if generator_index is not None:
-        if os.path.exists(base_path + 'generator_' + generator_index + '.h5'):
+        if os.path.exists(base_path + 'generator_' + generator_index + '/'):
             print("Loading Model from File for Generator")
-            model = tf.keras.models.load_model(base_path + 'generator_' + generator_index + '.h5', compile=is_training)
+            model = tf.keras.layers.TFSMLayer(f"{base_path}/generator_{generator_index}/",
+                                                        call_endpoint='serving_default')
             if return_is_new:
                 return model, False
             return model
     if os.path.exists(base_path + 'generator.h5'):
         print("Loading Model from File for Generator")
-        model = tf.keras.models.load_model(base_path + 'generator.h5', compile=is_training)
+        model = tf.keras.layers.TFSMLayer(f"{base_path}/generator/",
+                                                    call_endpoint='serving_default')
         if return_is_new:
             return model, False
         return model
@@ -117,16 +120,18 @@ def eeg_generator(generator_index: str = None, base_path: str = './', return_is_
 def eeg_discriminator(discriminator_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True, graph: bool = False):
     # if discriminator.h5 exists, load it
     if discriminator_index is not None:
-        if os.path.exists(base_path + 'discriminator_' + discriminator_index + '.h5'):
+        if os.path.exists(base_path + 'discriminator_' + discriminator_index + '/'):
             print("Loading Model from File for Discriminator")
-            model = tf.keras.models.load_model(base_path + 'discriminator_' + discriminator_index + '.h5', compile=is_training)
+            model = tf.keras.layers.TFSMLayer(f"{base_path}/discriminator_{discriminator_index}/",
+                                                        call_endpoint='serving_default')
             if return_is_new:
                 return model, False
             return model
 
     if os.path.exists(base_path + 'discriminator.h5'):
         print("Loading Model from File for Discriminator")
-        model = tf.keras.models.load_model(base_path + 'discriminator.h5', compile=is_training)
+        model = tf.keras.layers.TFSMLayer(f"{base_path}/discriminator/",
+                                                    call_endpoint='serving_default')
         if return_is_new:
             return model, False
         return model
@@ -147,6 +152,7 @@ def discriminator_loss(real_output, predicted_output):
 def generator_loss(true_output, predicted_output):
     return tf.keras.losses.binary_crossentropy(true_output, predicted_output, from_logits=True)
 
+@deprecated("Do not use!")
 def eeg_gan_network(generator, discriminator, discriminator_optimizer, gan_optimizer, gan_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True, graph: bool = False):
     if gan_index is not None:
         if os.path.exists(base_path + 'gan_' + gan_index + '.h5'):

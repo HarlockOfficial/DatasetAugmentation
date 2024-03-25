@@ -18,43 +18,30 @@ def main(out_class, path_to_neural_network):
         out_class = None
 
     generator, is_generator_new = utils.eeg_generator(out_class, path_to_neural_network, return_is_new=True, is_training=False)
-    discriminator, is_discriminator_new = utils.eeg_discriminator(out_class, path_to_neural_network, return_is_new=True, is_training=False)
-    generator_loss, discriminator_loss, gan_loss = utils.eeg_gan_default_loss()
-    generator_optimizer, discriminator_optimizer, gan_optimizer = utils.eeg_gan_default_optimizer()
-    gan, is_gan_new = utils.eeg_gan_network(generator, discriminator, discriminator_loss, gan_loss, discriminator_optimizer, gan_optimizer, out_class, path_to_neural_network, return_is_new=True, is_training=False)
-
-    assert not is_generator_new and not is_discriminator_new and not is_gan_new, "At least one of the models is new, please train the models first"
+    assert not is_generator_new, "Please train the generator first"
 
     x, y = utils.load_dataset(PhysionetMI)
     if out_class is not None:
         dataset_by_label = utils.split_dataset_by_label(x, y)
         testing_dataset = dataset_by_label[out_class]
     else:
-        testing_dataset = zip(x, y)
+        testing_dataset = x
     dataset_element = random.choice(testing_dataset)
-    prediction = discriminator.predict(dataset_element)
-    print(f"Discriminator prediction for dataset element: {prediction}")
-
+    avg_element = np.mean(testing_dataset, axis=0)
     seed = tf.random.normal([22, 58, 65])
-    generated_data = generator.predict(seed)
-    print(f"Generator prediction for seed: {generated_data.shape}")
-    prediction = discriminator.predict(generated_data)
-    print(f"Discriminator prediction for generator prediction: {prediction}")
-    prediction = discriminator.predict(dataset_element)
-    print(f"Discriminator prediction for dataset element: {prediction}")
-    prediction = gan.predict(seed)
-    print(f"GAN prediction for seed: {prediction}")
-
-    print("All predictions are done!")
-
+    # score the generator
+    generated_element = generator(seed, training=False)['output_0']
+    avg_generated_element = np.mean(generated_element, axis=0)
+    element_diff = np.subtract(avg_generated_element, avg_element)
     print("Dataset Element:", dataset_element)
-    print("Generated Data:", generated_data)
-
-
+    print("Generated Element:", generated_element)
+    print("Element Difference:", element_diff)
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: Tester.py <network_expected_output_class> <path_to_network_files_to_load>")
         sys.exit(1)
-    main(sys.argv[1], sys.argv[2])
+    expected_output_class = sys.argv[1]
+    path_to_network_files = sys.argv[2]
+    main(expected_output_class, path_to_network_files)
