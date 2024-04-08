@@ -1,47 +1,61 @@
+import os
+import pickle
 import random
 import sys
 
 import numpy as np
-import tensorflow as tf
-from moabb.datasets import PhysionetMI
+import torch
 
-from DatasetAugmentation import utils
+import EEGClassificator.utils
+import VirtualController.main
 
 random.seed(42)
-tf.random.set_seed(42)
 np.random.seed(42)
 np.random.RandomState(42)
+torch.manual_seed(42)
 
+def load_all(path, out_class=None):
+    generator_list = []
+    files = os.listdir(path)
+    files = filter(lambda x: x.endswith('.pkl') and 'generator' in x, files)
+    if out_class is not None:
+        files = filter(lambda x: out_class in x, files)
+    for file in files:
+        generator = pickle.load(open(path + file, 'rb'))
+        generator_list.append((file, generator))
+    return generator_list
 
-def main(out_class, path_to_neural_network):
+def main(out_class, path_to_generator_network, path_to_classificator_network):
     if out_class.lower() == "none":
         out_class = None
 
-    generator, is_generator_new = utils.eeg_generator(out_class, path_to_neural_network, return_is_new=True, is_training=False)
-    assert not is_generator_new, "Please train the generator first"
+    class_to_value = EEGClassificator.utils.to_categorical(out_class)
 
-    x, y = utils.load_dataset(PhysionetMI)
-    if out_class is not None:
-        dataset_by_label = utils.split_dataset_by_label(x, y)
-        testing_dataset = dataset_by_label[out_class]
-    else:
-        testing_dataset = x
-    dataset_element = random.choice(testing_dataset)
-    avg_element = np.mean(testing_dataset, axis=0)
-    seed = tf.random.normal([22, 58, 65])
-    # score the generator
-    generated_element = generator(seed, training=False)['output_0']
-    avg_generated_element = np.mean(generated_element, axis=0)
-    element_diff = np.subtract(avg_generated_element, avg_element)
-    print("Dataset Element:", dataset_element)
-    print("Generated Element:", generated_element)
-    print("Element Difference:", element_diff)
-
+    generator_list = load_all(path_to_generator_network, out_class)
+    classificator = VirtualController.load_classificator(path_to_classificator_network)
+    print(f"Expected class: {out_class}/{class_to_value}")
+    for filename, generator in generator_list:
+        print(f"Testing generator: {filename}", flush=True)
+        seed = torch.rand([1000, 1, 58, 65]).to('cuda' if torch.cuda.is_available() else 'cpu').to(torch.float32)
+        # score the generator
+        generated_element, _ = generator(seed)
+        generated_element = generated_element.detach().cpu().numpy().reshape(1000, 58, 65)
+        result = classificator.predict(generated_element)
+        correct_elements = np.sum(result == class_to_value)
+        print(f"Number of generated elements: {result.shape[0]}")
+        print(f"Number of correct elements: {correct_elements}")
+        print(f"Accuracy: {correct_elements/result.shape[0]}", flush=True)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: Tester.py <network_expected_output_class> <path_to_network_files_to_load>")
+    if len(sys.argv) != 4:
+        print("Usage: Tester.py <network_expected_output_class> <path_to_generator_network_file_to_load> <path_to_classificator_network_file_to_load>")
         sys.exit(1)
     expected_output_class = sys.argv[1]
     path_to_network_files = sys.argv[2]
-    main(expected_output_class, path_to_network_files)
+    path_to_classificator_network = sys.argv[3]
+    """
+    expected_output_class = "feet"
+    path_to_network_files = '../../../models/2024_04_02_20_00_22/'
+    path_to_classificator_network = '../../../models/2024_03_25_23_21_59/LSTMNet_0.5943600867678959.pkl'
+    """
+    main(expected_output_class, path_to_network_files, path_to_classificator_network)

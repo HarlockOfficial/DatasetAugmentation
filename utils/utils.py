@@ -1,4 +1,5 @@
 import os
+import pickle
 
 import moabb.datasets
 import tensorflow as tf
@@ -92,16 +93,28 @@ def eeg_generator(generator_index: str = None, base_path: str = './', return_is_
     # if generator.h5 exists, load it
     if generator_index is not None:
         if os.path.exists(base_path + 'generator_' + generator_index + '/'):
-            print("Loading Model from File for Generator")
+            print("Loading Model from File for Generator (Tensorflow SavedModel)")
             model = tf.keras.layers.TFSMLayer(f"{base_path}/generator_{generator_index}/",
                                                         call_endpoint='serving_default')
             if return_is_new:
                 return model, False
             return model
+        elif os.path.exists(base_path + 'generator_' + generator_index + '.pkl'):
+            print("Loading Model from File for Generator (Pickle)")
+            model = pickle.load(open(base_path + 'generator_' + generator_index + '.pkl', 'rb'))
+            if return_is_new:
+                return model, False
+            return model
     if os.path.exists(base_path + 'generator.h5'):
-        print("Loading Model from File for Generator")
+        print("Loading Model from File for Generator (Tensorflow H5)")
         model = tf.keras.layers.TFSMLayer(f"{base_path}/generator/",
                                                     call_endpoint='serving_default')
+        if return_is_new:
+            return model, False
+        return model
+    elif os.path.exists(base_path + 'generator.pkl'):
+        print("Loading Model from File for Generator (Pickle)")
+        model = pickle.load(open(base_path + 'generator.pkl', 'rb'))
         if return_is_new:
             return model, False
         return model
