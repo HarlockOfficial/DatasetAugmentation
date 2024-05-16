@@ -6,16 +6,17 @@ import tensorflow as tf
 from moabb.paradigms import MotorImagery
 from typing_extensions import deprecated
 
-OUTPUT_CLASSES = 3
 SAMPLE_RATE = 128  # Hz (samples per second)
 SECOND_DURATION = 0.5  # seconds
 
-def load_dataset(moabb_dataset_class = moabb.datasets.BNCI2014001, subject_id = None, verbose: int = 0):
+def load_dataset(moabb_dataset_class = moabb.datasets.BNCI2014001, subject_id = None, events: list[str] = None, get_verbose_information: bool=False, verbose: int = 0):
     """Load a dataset from MOABB.
 
     Args:
         moabb_dataset_class: The name of the dataset to load. Defaults to "BNCI2014_001".
         subject_id (Any, optional): The subject to load. If None, load all subjects. Defaults to None.
+        events (list[str], optional): The events to load. Defaults to ["left_hand", "right_hand", "feet"].
+        get_verbose_information (bool, optional): Get verbose information. Defaults to False.
         verbose (int, optional): The verbosity level. Defaults to 0.
 
     Returns:
@@ -27,21 +28,26 @@ def load_dataset(moabb_dataset_class = moabb.datasets.BNCI2014001, subject_id = 
                         'O2', 'C1', 'Oz', 'C2', 'P6', 'C4', 'F2', 'F5', 'PO7', 'C3', 'FC2', 'FC3', 'TP7', 'P5', 'C5',
                         'T7', 'C6', 'TP8', 'P8', 'FT7', 'CPz', 'AF3', 'FC6', 'P7', 'F7', 'PO8', 'CP5', 'P2', 'FCz']
     INPUT_CHANNELS = len(ALL_EEG_CHANNELS)
-    print("Using the ", INPUT_CHANNELS, "Channels:", ALL_EEG_CHANNELS)
-
-    paradigm = MotorImagery(channels=ALL_EEG_CHANNELS, events=['left_hand', 'right_hand', 'feet'],
+    print("Using the", INPUT_CHANNELS, "Channels:", ALL_EEG_CHANNELS)
+    if events is None:
+        events = ['left_hand', 'right_hand', 'feet']
+    OUTPUT_CLASSES = len(events)
+    paradigm = MotorImagery(channels=ALL_EEG_CHANNELS, events=events,
                             n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION,
-                            resample=SAMPLE_RATE, )
-
+                            resample=SAMPLE_RATE)
     x, y, _ = paradigm.get_data(moabb_dataset_class(), subjects=subject_id)
     if verbose>0:
         print("X Shape:", x.shape)
         print("Y Shape:", y.shape)
+    if get_verbose_information:
+        return x, y, INPUT_CHANNELS, ALL_EEG_CHANNELS, paradigm
     return x, y
 
+@deprecated("Do not use!")
 def __to_mV(x):
     return x * 1e6
 
+@deprecated("Do not use!")
 def preprocess_dataset(local_dataset, n_jobs: int = 20):
     from braindecode.preprocessing import exponential_moving_standardize
     from braindecode.preprocessing import Preprocessor, preprocess
@@ -128,7 +134,6 @@ def eeg_generator(generator_index: str = None, base_path: str = './', return_is_
     if return_is_new:
         return model, True
     return model
-
 
 def eeg_discriminator(discriminator_index: str = None, base_path: str = './', return_is_new: bool = False, is_training: bool = True, graph: bool = False):
     # if discriminator.h5 exists, load it
