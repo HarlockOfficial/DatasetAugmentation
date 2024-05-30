@@ -90,9 +90,9 @@ def train(dataset, label, device='cuda', train_epochs=1000, path_to_save='./mode
 
 def main(path_to_save = None):
     if path_to_save is None:
-        t = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+        t = datetime.now().strftime('%Y_%m_%d_%H_%M_%S') + '_generators'
         path_to_save = f'./models/{t}/'
-    x, y = utils.load_dataset(PhysionetMI, verbose=0)
+    x, y = utils.load_dataset(PhysionetMI, verbose=0, events=['left_hand', 'right_hand', 'feet', 'rest'])
     train_dataset_by_label = utils.split_dataset_by_label(x, y, verbose=0)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
