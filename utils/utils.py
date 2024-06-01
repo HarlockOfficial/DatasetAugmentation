@@ -2,12 +2,20 @@ import os
 import pickle
 
 import moabb.datasets
+import numpy as np
 import tensorflow as tf
 from moabb.paradigms import MotorImagery
 from typing_extensions import deprecated
 
 SAMPLE_RATE = 128  # Hz (samples per second)
 SECOND_DURATION = 0.5  # seconds
+ALL_EEG_CHANNELS = ['FC4', 'P3', 'CP2', 'Fp2', 'Fpz', 'PO4', 'Fp1', 'F3', 'CP3', 'Fz', 'Pz', 'F1', 'AF4', 'CP1',
+                    'PO3', 'Cz', 'FC1', 'F4', 'P1', 'O1', 'F8', 'CP6', 'POz', 'FC5', 'FT8', 'P4', 'T8', 'CP4', 'F6',
+                    'O2', 'C1', 'Oz', 'C2', 'P6', 'C4', 'F2', 'F5', 'PO7', 'C3', 'FC2', 'FC3', 'TP7', 'P5', 'C5',
+                    'T7', 'C6', 'TP8', 'P8', 'FT7', 'CPz', 'AF3', 'FC6', 'P7', 'F7', 'PO8', 'CP5', 'P2', 'FCz']
+INPUT_CHANNELS = len(ALL_EEG_CHANNELS)
+L_FREQ = 0.5
+H_FREQ = 40.0
 
 def load_dataset(moabb_dataset_class = moabb.datasets.BNCI2014001, subject_id = None, events: list[str] = None, get_verbose_information: bool=False, verbose: int = 0):
     """Load a dataset from MOABB.
@@ -22,18 +30,12 @@ def load_dataset(moabb_dataset_class = moabb.datasets.BNCI2014001, subject_id = 
     Returns:
         [type]: [description]
     """
-
-    ALL_EEG_CHANNELS = ['FC4', 'P3', 'CP2', 'Fp2', 'Fpz', 'PO4', 'Fp1', 'F3', 'CP3', 'Fz', 'Pz', 'F1', 'AF4', 'CP1',
-                        'PO3', 'Cz', 'FC1', 'F4', 'P1', 'O1', 'F8', 'CP6', 'POz', 'FC5', 'FT8', 'P4', 'T8', 'CP4', 'F6',
-                        'O2', 'C1', 'Oz', 'C2', 'P6', 'C4', 'F2', 'F5', 'PO7', 'C3', 'FC2', 'FC3', 'TP7', 'P5', 'C5',
-                        'T7', 'C6', 'TP8', 'P8', 'FT7', 'CPz', 'AF3', 'FC6', 'P7', 'F7', 'PO8', 'CP5', 'P2', 'FCz']
-    INPUT_CHANNELS = len(ALL_EEG_CHANNELS)
     print("Using the", INPUT_CHANNELS, "Channels:", ALL_EEG_CHANNELS)
     if events is None:
         events = ['left_hand', 'right_hand', 'feet']
     OUTPUT_CLASSES = len(events)
     paradigm = MotorImagery(channels=ALL_EEG_CHANNELS, events=events,
-                            n_classes=OUTPUT_CLASSES, fmin=0.5, fmax=40, tmin=0, tmax=SECOND_DURATION,
+                            n_classes=OUTPUT_CLASSES, fmin=L_FREQ, fmax=H_FREQ, tmin=0, tmax=SECOND_DURATION,
                             resample=SAMPLE_RATE)
     x, y, _ = paradigm.get_data(moabb_dataset_class(), subjects=subject_id)
     if verbose>0:
@@ -44,7 +46,7 @@ def load_dataset(moabb_dataset_class = moabb.datasets.BNCI2014001, subject_id = 
     return x, y
 
 @deprecated("Do not use!")
-def __to_mV(x):
+def to_mV(x):
     return x * 1e6
 
 @deprecated("Do not use!")
@@ -52,8 +54,6 @@ def preprocess_dataset(local_dataset, n_jobs: int = 20):
     from braindecode.preprocessing import exponential_moving_standardize
     from braindecode.preprocessing import Preprocessor, preprocess
 
-    low_cut_hz = 0.5  # low cut frequency for filtering
-    high_cut_hz = 40.  # high cut frequency for filtering
     # Parameters for exponential moving standardization
     factor_new = 1e-3
     init_block_size = 1000
@@ -63,9 +63,9 @@ def preprocess_dataset(local_dataset, n_jobs: int = 20):
     preprocessors = [# keep only EEG sensors
         Preprocessor(fn='pick_types', eeg=True, meg=False, stim=False),
         # convert from volt to microvolt, directly modifying the numpy array
-        Preprocessor(fn=__to_mV),
+        Preprocessor(fn=to_mV),
         # bandpass filter
-        Preprocessor(fn='filter', l_freq=low_cut_hz, h_freq=high_cut_hz), # exponential moving standardization
+        Preprocessor(fn='filter', l_freq=L_FREQ, h_freq=H_FREQ), # exponential moving standardization
         Preprocessor(fn=exponential_moving_standardize, factor_new=factor_new, init_block_size=init_block_size),
         Preprocessor(fn='resample', sfreq=min_sfreq)]
 
@@ -202,3 +202,6 @@ def eeg_gan_default_optimizer():
     discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
     return generator_optimizer, discriminator_optimizer
 
+def data_filter(data: np.ndarray, low_cut_hz: float = L_FREQ, high_cut_hz: float = H_FREQ, rate: int = SAMPLE_RATE):
+    from mne.filter import filter_data
+    return filter_data(data, rate, low_cut_hz, high_cut_hz)
