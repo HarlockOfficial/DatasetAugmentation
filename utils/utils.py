@@ -87,6 +87,43 @@ def split_dataset_by_label(x, y, verbose: int = 0):
 
     return dataset_by_label
 
+def merge_dataset_by_label(downsampled_dataset_by_label: dict[str, np.array], shuffle: bool=True) -> tuple[np.array, np.array]:
+    """
+    Merge the dataset by label.
+
+    Args:
+        downsampled_dataset_by_label: The dataset to merge.
+
+    Returns:
+        The merged dataset.
+    """
+    x = np.concatenate([downsampled_dataset_by_label[key] for key in downsampled_dataset_by_label.keys()])
+    y = np.concatenate([np.array([key]*len(downsampled_dataset_by_label[key])) for key in downsampled_dataset_by_label.keys()])
+    if shuffle:
+        p = np.random.permutation(len(x))
+        x = x[p]
+        y = y[p]
+    return x, y
+
+def downsample_dataset_by_label(dataset_by_label: dict[str, np.array], quantity: int, verbose: int = 0) -> dict[str, np.array]:
+    """
+    Downsample the dataset by label.
+
+    Args:
+        dataset_by_label: The dataset to downsample.
+        quantity: The quantity to downsample to.
+        verbose: The verbosity level.
+
+    Returns:
+        The downsampled dataset.
+    """
+    out = dict()
+    for key in dataset_by_label.keys():
+        out[key] = dataset_by_label[key][:quantity]
+    if verbose>0:
+        print(out.keys())
+    return out
+
 def two_layer_blstm_with_dropout(network_input):
     bi_lstm_1 = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(65, activation='tanh', return_sequences=True))(
         network_input)
