@@ -73,7 +73,7 @@ def preprocess_dataset(local_dataset, n_jobs: int = 20):
     preprocess(local_dataset, preprocessors, n_jobs=n_jobs)
     return local_dataset
 
-def split_dataset_by_label(x, y, verbose: int = 0):
+def split_dataset_by_label(x, y, test_size:float = None, verbose: int = 0):
     """
     Split the dataset by label.
     """
@@ -85,6 +85,16 @@ def split_dataset_by_label(x, y, verbose: int = 0):
     if verbose>0:
         print(dataset_by_label.keys())
 
+    if test_size is not None:
+        train_dataset_by_label = dict()
+        test_dataset_by_label = dict()
+        for key in dataset_by_label.keys():
+            dataset_by_label[key] = np.array(dataset_by_label[key])
+            p = np.random.permutation(len(dataset_by_label[key]))
+            dataset_by_label[key] = dataset_by_label[key][p]
+            train_dataset_by_label[key] = dataset_by_label[key][:int(len(dataset_by_label[key])*test_size)]
+            test_dataset_by_label[key] = dataset_by_label[key][int(len(dataset_by_label[key])*test_size):]
+        return train_dataset_by_label, test_dataset_by_label
     return dataset_by_label
 
 def merge_dataset_by_label(downsampled_dataset_by_label: dict[str, np.array], shuffle: bool=True) -> tuple[np.array, np.array]:
@@ -93,6 +103,7 @@ def merge_dataset_by_label(downsampled_dataset_by_label: dict[str, np.array], sh
 
     Args:
         downsampled_dataset_by_label: The dataset to merge.
+        shuffle: Shuffle the dataset.
 
     Returns:
         The merged dataset.
